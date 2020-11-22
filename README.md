@@ -11,9 +11,9 @@ Exemple de fichier config :
 ```ini
 [CONFIG]
 repertoire_racine=/home/test
-repertoire=/home/test/apache-tomcat-9.0.37\webapps
+repertoire=/home/test/apache-tomcat-9.0.37/webapps
 repertoire_glob=*.js,*.html
-liste_repertoire=/home/test/apache-tomcat-9.0.37\webapps
+liste_repertoire=/home/test/apache-tomcat-9.0.37/webapps
 repertoire_resultat=out
 
 [LOGGING]
