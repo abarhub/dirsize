@@ -2,12 +2,14 @@ import csv
 import fnmatch
 import logging
 import operator
+import os
 from configparser import ConfigParser
 from datetime import datetime
 from pathlib import Path
 
 
 class PathInfo:
+    """Un Path avec des informations complementaires"""
     size = 0
 
     def __str__(self):
@@ -17,41 +19,42 @@ class PathInfo:
     def __repr__(self):
         return self.__str__()
 
-    def ajoute(self, path, size):
+    def ajoute(self, path: Path, size: int):
         pass
 
-    def resultat(self):
+    def resultat(self) -> [str]:
         return [self.size]
 
 
 class PathInfoSimple(PathInfo):
     path = None
 
-    def __init__(self, path):
+    def __init__(self, path: Path):
         assert path != None
         assert isinstance(path, Path), f'type path:{type(path)}'
         self.path = path
 
-    def ajoute(self, path, size):
+    def ajoute(self, path: Path, size: int):
         if startWith(path, self.path):
             self.size += size
 
-    def resultat(self):
+    def resultat(self) -> [[str]]:
         return [[str(self.path), self.size, format_bytes2(self.size)]]
 
 
 class PathInfoGlob(PathInfo):
+    """Un Path associé à un glob"""
     glob = None
 
     def __init__(self, glob):
         assert glob != None
         self.glob = glob
 
-    def ajoute(self, path, size):
+    def ajoute(self, path: Path, size: int):
         if fnmatch.fnmatch(path, self.glob):
             self.size += size
 
-    def resultat(self):
+    def resultat(self) -> [str]:
         return [[self.glob, self.size, format_bytes2(self.size)]]
 
 
@@ -60,12 +63,12 @@ class PathInfoList(PathInfo):
     listPath = {}
     fileSize = 0
 
-    def __init__(self, path):
+    def __init__(self, path: Path):
         assert path != None
         assert isinstance(path, Path), f'type path:{type(path)}'
         self.path = path
 
-    def ajoute(self, path, size):
+    def ajoute(self, path: Path, size: int):
         if str(path).startswith(str(self.path)):
             self.size += size
             (nom, suite) = self.decoupe(path)
@@ -79,7 +82,7 @@ class PathInfoList(PathInfo):
             else:
                 self.fileSize += size
 
-    def decoupe(self, path):
+    def decoupe(self, path: Path):
         if path.parent == self.path:
             return (path.name, '')
         else:
@@ -94,7 +97,7 @@ class PathInfoList(PathInfo):
         typeClasse = type(self).__name__
         return f'{typeClasse}(listPath:{self.listPath};fileSize:{self.fileSize})'
 
-    def resultat(self):
+    def resultat(self) -> [[str]]:
         liste = []
         for key, value in self.listPath.items():
             liste.append([str(self.path / key), value, format_bytes2(value)])
@@ -102,7 +105,19 @@ class PathInfoList(PathInfo):
         return liste
 
 
-def format_bytes2(size):
+def format_bytes2(size: int) -> str:
+    """retourne le nombre arrondi en unité approchante, avec 2 chiffres apres la virgule
+
+    :param size: la taille a calculer
+    :type size: int
+    :return le nombre formaté
+    :rtype str
+
+    exemple:
+    format_bytes2(8932136) => 8.52 megabytes
+    format_bytes2(161301) => 157.52 kilobytes
+    format_bytes2(40161) => 39.22 kilobytes
+    """
     val, label = format_bytes(size * 1.0)
     if val.is_integer():
         return f'{val} {label}'
@@ -110,7 +125,13 @@ def format_bytes2(size):
         return f'{val:.2f} {label}'
 
 
-def format_bytes(size):
+def format_bytes(size: int) -> (int, str):
+    """Formate le nombre size. Retourne le nombre avec l'unité
+
+    exemples :
+    format_bytes(1024) => 1024,kilobytes
+    format_bytes(1048576) => 1024,megabytes
+    """
     # 2**10 = 1024
     power = 2 ** 10
     n = 0
@@ -121,7 +142,8 @@ def format_bytes(size):
     return size, power_labels[n] + 'bytes'
 
 
-def startWith(pathComplet, path):
+def startWith(pathComplet: Path, path: Path) -> bool:
+    """Retourne True ssi path est un chemin contenant pathComplet"""
     if path == None or pathComplet == None:
         return False
     p1 = pathComplet.resolve()
@@ -139,19 +161,23 @@ def startWith(pathComplet, path):
     return False
 
 
-def parcourt(repertoire, dico):
-    for child in repertoire.iterdir():
-        if (child.is_dir()):
-            parcourt(child, dico)
-        else:
-            size = child.stat().st_size
-            # print(child, size)
-            logging.debug(f'fichier: {child} size: {size}')
-            for key, value in dico.items():
-                value.ajoute(child, size)
+def parcourt(repertoire: Path, dico):
+    """Parcourt le répertoire 'repertoire' et met à jour le dictionnaire 'dico'"""
+    with os.scandir(repertoire) as entries:
+        for child in entries:
+            if child.is_dir():
+                p = Path(child.path)
+                parcourt(p, dico)
+            elif child.is_file():
+                size = child.stat().st_size
+                p = Path(child.path)
+                logging.debug(f'fichier: {p} size: {size}')
+                for key, value in dico.items():
+                    value.ajoute(p, size)
 
 
 def parcourt_complet():
+    """Fait le parcourt de tous les répertoires"""
     config_object = ConfigParser()
     config_object.read("config.ini")
 
@@ -221,6 +247,7 @@ def parcourt_complet():
 
 
 def parseLogConfig():
+    """lit la configuration des logs et initialise les logs"""
     config_object = ConfigParser()
     config_object.read("config.ini")
 
@@ -239,11 +266,15 @@ def parseLogConfig():
         level = logging.ERROR
 
     logging.basicConfig(filename=logfile, level=level,
-                        format='%(asctime)s -- %(name)s -- %(levelname)s -- %(message)s')
+                        format='%(asctime)s -- %(name)s -- %(levelname)s -- %(message)s',
+                        filemode='a')
 
 
 if __name__ == '__main__':
     parseLogConfig()
+    debut = datetime.now()
     logging.info("demarrage")
     parcourt_complet()
     logging.info("fin")
+    fin = datetime.now()
+    logging.info(f'Duree execution: {fin-debut}')
